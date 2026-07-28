@@ -1,0 +1,32 @@
+{
+	"schemaVersion": 1,
+	"id": "auto-updater",
+	"version": "${version}",
+	"name": "Auto Updater",
+	"description": "This mod adds a GUI to automatically update all of your mods!",
+	"authors": [
+		"SlightlyGoodGames"
+	],
+	"contact": {
+		"homepage": "https://modrinth.com/mod/auto-updater",
+		"sources": "https://github.com/FabricMC/fabric-example-mod"
+	},
+	"license": "CC0-1.0",
+	"icon": "assets/auto-updater/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"client": [
+			"name.autoupdater.client.AutoUpdaterClient"
+		],
+		"main": [
+			"name.autoupdater.AutoUpdater"
+		]
+	},
+	"mixins": [],
+	"depends": {
+		"fabricloader": ">=0.19.3",
+		"minecraft": "~26.2",
+		"java": ">=25",
+		"fabric-api": "*"
+	}
+}
