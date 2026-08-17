@@ -13,9 +13,7 @@ public class AutoUpdater implements ModInitializer {
 	public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
 	@Override
-	public void onInitialize() {
-		LOGGER.info("Hello Fabric world!");
-	}
+	public void onInitialize() {}
 
 	public static void log(String msg){
 		LOGGER.info(msg);

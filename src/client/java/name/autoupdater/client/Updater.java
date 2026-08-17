@@ -25,7 +25,7 @@ import name.autoupdater.AutoUpdater;
 enum QueryType{
     PROJECT("https://api.modrinth.com/v2/project/"),VERSION("https://api.modrinth.com/v2/version/");
 
-    private String address;
+    private final String address;
     QueryType(String address){
         this.address = address;
     }
@@ -103,7 +103,7 @@ public class Updater{
         System.out.println("Finished moving files!");*/
     }
     static int downloadLatestVersion(String project){
-        AutoUpdater.LOGGER.info("Downloading Modrinth project "+project+"...");
+        AutoUpdater.LOGGER.info("Getting data for Modrinth project "+project+"...");
 
         if(!project.contains("IGNORE")){
             int fromLatest = 0;
@@ -127,7 +127,7 @@ public class Updater{
 
                 String filePathName = MOD_ROOT + "\\updated\\" + project + ".jar";
 
-                AutoUpdater.LOGGER.info("Downloading version " + versionFileData.get("id").getAsString() + " of project "+project);
+                AutoUpdater.LOGGER.info("Downloading version " + versionFileData.get("id").getAsString() + " of project "+project + "...");
 
                 downloadFile(versionFileData.get("url").getAsString(), filePathName);
                 while (!getFileHash(filePathName).equals(versionFileData.get("hashes").getAsJsonObject().get("sha512").getAsString())) {
@@ -135,13 +135,11 @@ public class Updater{
                     AutoUpdater.LOGGER.warn("Hash comparison failed for project "+project+"!");
                     AutoUpdater.LOGGER.warn("If this happens repeatedly, consider checking the mod page on Modrinth or reporting an issue on GitHub with the details of the mod being downloaded.");
                 }
-                //AutoUpdater.log("Downloaded "+project+"!");
             } catch (Exception e){
                 e.printStackTrace();
             }
         } else {
             copyFile(MOD_ROOT+"\\"+project+".jar",MOD_ROOT+"\\updated\\"+project+".jar");
-            //AutoUpdater.log("Moved "+project+"!");
         }
         return 0;
     }
