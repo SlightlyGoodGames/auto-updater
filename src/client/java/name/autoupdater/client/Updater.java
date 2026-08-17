@@ -6,14 +6,13 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Scanner;
+import java.util.Map;
 import java.util.stream.Stream;
 
 import com.google.gson.JsonArray;
@@ -21,7 +20,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-//import name.autoupdater.AutoUpdater;
+import name.autoupdater.AutoUpdater;
 
 enum QueryType{
     PROJECT("https://api.modrinth.com/v2/project/"),VERSION("https://api.modrinth.com/v2/version/");
@@ -45,8 +44,6 @@ public class Updater{
 
     private static final String GAME_VERSION = "26.2";
     private static final String LOADER = "fabric";
-
-    private static final Scanner SCANNER = new Scanner(System.in);
 
     private static int currentMod = 0;
     private static List<String> allFileNames;
@@ -106,7 +103,7 @@ public class Updater{
         System.out.println("Finished moving files!");*/
     }
     static int downloadLatestVersion(String project){
-        System.out.println("Downloading "+project);
+        AutoUpdater.LOGGER.info("Downloading Modrinth project "+project+"...");
 
         if(!project.contains("IGNORE")){
             int fromLatest = 0;
@@ -130,10 +127,13 @@ public class Updater{
 
                 String filePathName = MOD_ROOT + "\\updated\\" + project + ".jar";
 
+                AutoUpdater.LOGGER.info("Downloading version " + versionFileData.get("id").getAsString() + " of project "+project);
+
                 downloadFile(versionFileData.get("url").getAsString(), filePathName);
                 while (!getFileHash(filePathName).equals(versionFileData.get("hashes").getAsJsonObject().get("sha512").getAsString())) {
                     downloadFile(versionFileData.get("url").getAsString(), filePathName);
-                    System.out.println("Hash failed");
+                    AutoUpdater.LOGGER.warn("Hash comparison failed for project "+project+"!");
+                    AutoUpdater.LOGGER.warn("If this happens repeatedly, consider checking the mod page on Modrinth or reporting an issue on GitHub with the details of the mod being downloaded.");
                 }
                 //AutoUpdater.log("Downloaded "+project+"!");
             } catch (Exception e){
@@ -190,6 +190,23 @@ public class Updater{
         }
         return null;
     }
+    static APIReturn queryAPI(String address,QueryType queryType,Map<String,String> args){
+        try {
+            String newAddress = queryType.getAddress() + address + "?";
+            for(String key : args.keySet()){
+                newAddress += key + "=" + args.get(key) + "&";
+            }
+            newAddress = newAddress.substring(0, newAddress.length()-1);
+
+            HttpRequest request = HttpRequest.newBuilder().uri(URI.create(newAddress)).GET().header("User-Agent","SlightlyGoodGames/auto-updater/1.1.0").build();
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+            return new APIReturn(response.body(),response.statusCode());
+        } catch (IOException | InterruptedException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
     static PossibleFail<String> getXLatestVersion(String project, int fromLatest){
         APIReturn apiQuery = queryAPI(project,QueryType.PROJECT);
 
@@ -218,7 +235,6 @@ public class Updater{
         String versionJson = queryAPI(version,QueryType.VERSION).body();
 
         JsonObject versionJsonObj = getJsonAsObj(versionJson);
-        System.out.println("Downloading version " + versionJsonObj.get("id").getAsString());
         JsonArray versionFiles = versionJsonObj.getAsJsonArray("files");
         JsonObject fileObj = versionFiles.get(0).getAsJsonObject();
 

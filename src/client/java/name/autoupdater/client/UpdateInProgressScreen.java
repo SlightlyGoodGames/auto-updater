@@ -7,6 +7,8 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
+import name.autoupdater.AutoUpdater;
+
 public class UpdateInProgressScreen extends Screen {
     private int development = 0;
     private EditBox editBox;
@@ -19,6 +21,7 @@ public class UpdateInProgressScreen extends Screen {
 
     @Override
     protected void init(){
+        AutoUpdater.LOGGER.info("Beginning to update mods...");
         Updater.startFunction();
     }
 
