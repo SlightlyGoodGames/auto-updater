@@ -1,12 +1,16 @@
 package name.autoupdater.client;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
@@ -70,7 +74,9 @@ public class Updater{
     }
 
     static int mainFunction(){
-        if(downloadLatestVersion(allFileNames.get(currentMod))==1){
+        int latestVersionReturn = downloadLatestVersion(allFileNames.get(currentMod));
+
+        if(latestVersionReturn==1){
             return 3;
         } else {
             currentMod++;
@@ -80,7 +86,11 @@ public class Updater{
             return 1;
         }
 
-        currentProject = allFileNames.get(currentMod);
+        try {
+            currentProject = allFileNames.get(currentMod + 1);
+        } catch (IndexOutOfBoundsException e){
+            currentProject = "finished";
+        }
         return 0;
 
 
@@ -96,30 +106,68 @@ public class Updater{
         System.out.println("Finished moving files!");*/
     }
     static int downloadLatestVersion(String project){
+        System.out.println("Downloading "+project);
+
         if(!project.contains("IGNORE")){
             int fromLatest = 0;
-            for(boolean keepLooping=true;keepLooping;){
-                fromLatest++;
+            try {
+                for (boolean keepLooping = true; keepLooping; ) {
+                    fromLatest++;
 
-                PossibleFail<String> latestVersionStr = getXLatestVersion(project,fromLatest);
+                    PossibleFail<String> latestVersionStr = getXLatestVersion(project, fromLatest);
 
-                if(!latestVersionStr.failed()) {
-                    JsonObject xLatestVersion = getJsonAsObj(queryAPI(latestVersionStr.data(), QueryType.VERSION).body());
-                    JsonArray loaders = xLatestVersion.getAsJsonArray("loaders");
-                    JsonArray versions = xLatestVersion.getAsJsonArray("game_versions");
+                    if (!latestVersionStr.failed()) {
+                        JsonObject xLatestVersion = getJsonAsObj(queryAPI(latestVersionStr.data(), QueryType.VERSION).body());
+                        JsonArray loaders = xLatestVersion.getAsJsonArray("loaders");
+                        JsonArray versions = xLatestVersion.getAsJsonArray("game_versions");
 
-                    keepLooping = !(jsonArrayContains(loaders, LOADER) && jsonArrayContains(versions, GAME_VERSION));
-                } else {
-                    return 1;
+                        keepLooping = !(jsonArrayContains(loaders, LOADER) && jsonArrayContains(versions, GAME_VERSION));// && xLatestVersion.get("version_type").getAsString().equals("release"));
+                    } else {
+                        return 5;
+                    }
                 }
+                JsonObject versionFileData = getVersionFileData(getXLatestVersion(project, fromLatest).data());
+
+                String filePathName = MOD_ROOT + "\\updated\\" + project + ".jar";
+
+                downloadFile(versionFileData.get("url").getAsString(), filePathName);
+                while (!getFileHash(filePathName).equals(versionFileData.get("hashes").getAsJsonObject().get("sha512").getAsString())) {
+                    downloadFile(versionFileData.get("url").getAsString(), filePathName);
+                    System.out.println("Hash failed");
+                }
+                //AutoUpdater.log("Downloaded "+project+"!");
+            } catch (Exception e){
+                e.printStackTrace();
             }
-            downloadFile(getVersionFilePath(getXLatestVersion(project,fromLatest).data()),MOD_ROOT+"\\updated\\"+project+".jar");
-            //AutoUpdater.log("Downloaded "+project+"!");
         } else {
             copyFile(MOD_ROOT+"\\"+project+".jar",MOD_ROOT+"\\updated\\"+project+".jar");
             //AutoUpdater.log("Moved "+project+"!");
         }
         return 0;
+    }
+    static String getFileHash(String fileName){
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-512");
+
+            try (InputStream in = Files.newInputStream(Path.of(fileName))) {
+                byte[] buffer = new byte[8192];
+                int n;
+
+                while ((n = in.read(buffer)) != -1) {
+                    digest.update(buffer, 0, n);
+                }
+            }
+
+            StringBuilder hex = new StringBuilder();
+            for (byte b : digest.digest()) {
+                hex.append(String.format("%02x", b));
+            }
+
+            return hex.toString();
+        } catch (Exception e){
+            e.printStackTrace();
+        }
+        return null;
     }
     static boolean jsonArrayContains(JsonArray jsonArray,String memberName){
         for(JsonElement jsonElement : jsonArray){
@@ -133,7 +181,7 @@ public class Updater{
         try {
             String newAddress = queryType.getAddress() + address;
 
-            HttpRequest request = HttpRequest.newBuilder().uri(URI.create(newAddress)).GET().build();
+            HttpRequest request = HttpRequest.newBuilder().uri(URI.create(newAddress)).GET().header("User-Agent","SlightlyGoodGames/auto-updater/1.1.0").build();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
             return new APIReturn(response.body(),response.statusCode());
@@ -154,7 +202,11 @@ public class Updater{
         if(!failed) {
             JsonObject projectJsonObj = getJsonAsObj(projectJson);
             JsonArray projectVersions = projectJsonObj.getAsJsonArray("versions");
-            toReturn = projectVersions.get(projectVersions.size() - fromLatest).getAsString();
+            try {
+                toReturn = projectVersions.get(projectVersions.size() - fromLatest).getAsString();
+            } catch (IndexOutOfBoundsException e) {
+                return new PossibleFail<>(null,true);
+            }
         }
 
         return new PossibleFail<>(toReturn, failed);
@@ -162,19 +214,22 @@ public class Updater{
     static JsonObject getJsonAsObj(String json){
         return JsonParser.parseString(json).getAsJsonObject();
     }
-    static String getVersionFilePath(String version){
+    static JsonObject getVersionFileData(String version){
         String versionJson = queryAPI(version,QueryType.VERSION).body();
 
         JsonObject versionJsonObj = getJsonAsObj(versionJson);
+        System.out.println("Downloading version " + versionJsonObj.get("id").getAsString());
         JsonArray versionFiles = versionJsonObj.getAsJsonArray("files");
         JsonObject fileObj = versionFiles.get(0).getAsJsonObject();
 
-        return fileObj.get("url").getAsString();
+        return fileObj;
     }
     static void downloadFile(String url, String destination){
         try {
             Path destinationPath = Path.of(destination);
             Files.createDirectories(destinationPath.getParent());
+
+            Files.deleteIfExists(destinationPath);
 
             HttpRequest request = HttpRequest.newBuilder().uri(URI.create(url)).GET().build();
 
@@ -231,9 +286,8 @@ public class Updater{
     static void copyFile(String source, String destination){
         Path sourcePath = Path.of(source);
         Path destinationPath = Path.of(destination);
-
         try {
-            Files.copy(sourcePath, destinationPath);
+            Files.copy(sourcePath, destinationPath, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
             e.printStackTrace();
         }
