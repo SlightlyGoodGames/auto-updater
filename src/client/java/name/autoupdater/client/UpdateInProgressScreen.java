@@ -9,6 +9,8 @@ import net.minecraft.network.chat.Component;
 
 import name.autoupdater.AutoUpdater;
 
+import java.io.IOException;
+
 public class UpdateInProgressScreen extends Screen {
     private int development = 0;
     private EditBox editBox;
@@ -26,7 +28,7 @@ public class UpdateInProgressScreen extends Screen {
     }
 
     @Override
-    public void extractRenderState(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, float partialTick) {
+    public void extractRenderState(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, float partialTick){
         super.extractRenderState(guiGraphics, mouseX, mouseY, partialTick);
 
         String text;
@@ -34,7 +36,11 @@ public class UpdateInProgressScreen extends Screen {
         if(development == 0){
             text = "Downloading "+Updater.getCurrentDownloading()+".jar...";
             guiGraphics.text(this.font,text,getCentredX(text,2), height/5, 0xFFFFFFFF, true);
-            development = Updater.mainFunction();
+            try {
+                development = Updater.mainFunction();
+            } catch (Exception e){
+                e.printStackTrace();
+            }
         } else if(development == 1){
             text = "Finished downloading!";
             int y = height/5;

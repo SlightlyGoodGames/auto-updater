@@ -38,12 +38,16 @@ record APIReturn(String body,int statusCode){}
 
 record PossibleFail<T>(T data, boolean failed){}
 
+enum ScreenStatus{}
+
 public class Updater{
     private static final String MOD_ROOT = System.getenv("appdata")+"\\.minecraft\\mods";
     private static final HttpClient httpClient = HttpClient.newHttpClient();
 
     private static final String GAME_VERSION = "26.2";
     private static final String LOADER = "fabric";
+
+    private static final String USER_AGENT = "SlightlyGoodGames/auto-updater/"+AutoUpdater.MOD_VERSION;
 
     private static int currentMod = 0;
     private static List<String> allFileNames;
@@ -70,38 +74,54 @@ public class Updater{
         allFileNames.set(currentMod,newName);
     }
 
-    static int mainFunction(){
-        int latestVersionReturn = downloadLatestVersion(allFileNames.get(currentMod));
+    static int mainFunction() throws IOException,InterruptedException{
+        currentMod++;
 
-        if(latestVersionReturn==1){
-            return 3;
+        HttpResponse<String> applicableVersions = getFilteredProjectVersions(currentProject);
+        if(applicableVersions.statusCode() == 200){
+            JsonObject latestVersionObj = JsonParser.parseString(applicableVersions.body()).getAsJsonArray().get(0).getAsJsonObject();
+            JsonObject versionFileData = latestVersionObj.get("files").getAsJsonArray().get(0).getAsJsonObject();
+            String versionFileUrl = versionFileData.get("url").getAsString();
+            String versionFileHash = versionFileData.get("hashes").getAsJsonObject().get("sha512").getAsString();
+
+            String filePathName = MOD_ROOT + "\\updated\\" + currentProject + ".jar";
+
+            AutoUpdater.LOGGER.info("Downloading version " + versionFileData.get("id").getAsString() + " of project " + currentProject + "...");
+
+            downloadFile(versionFileUrl, filePathName);
+            while (!getFileHash(filePathName).equals(versionFileHash)) {
+                downloadFile(versionFileData.get("url").getAsString(), filePathName);
+                AutoUpdater.LOGGER.warn("Hash comparison failed for project " + currentProject + "!");
+                AutoUpdater.LOGGER.warn("If this happens repeatedly, consider checking the mod page on Modrinth or reporting an issue on GitHub with the details of the mod being downloaded.");
+            }
         } else {
-            currentMod++;
-        }
-
-        if (currentMod >= allFileNames.size()) {
-            return 1;
+            return 3;
         }
 
         try {
             currentProject = allFileNames.get(currentMod + 1);
-        } catch (IndexOutOfBoundsException e){
-            currentProject = "finished";
+        } catch (IndexOutOfBoundsException e) {
+            return 1;
         }
         return 0;
-
-
-        /*deleteFilesInFolder(MOD_ROOT);
-        moveFiles(MOD_ROOT+"\\updated",MOD_ROOT);
-
-        try {
-            Files.delete(Path.of(MOD_ROOT + "\\updated"));
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-        System.out.println("Finished moving files!");*/
     }
+
+
+
+    static void newMainFunction() throws IOException,InterruptedException{
+        System.out.println(getFilteredProjectVersions("sodium").body());
+    }
+
+    static HttpResponse<String> getFilteredProjectVersions(String project) throws IOException,InterruptedException{
+        String address = "https://api.modrinth.com/v2/project/" + project + "/version?";
+        String httpArgs = "loaders=["+LOADER+"]&game_versions=["+GAME_VERSION+"]&include_changelog=false";
+        String fullAddress = address + httpArgs;
+
+        HttpRequest request = HttpRequest.newBuilder().uri(URI.create(fullAddress)).GET().header("User-Agent",USER_AGENT).build();
+
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
     static int downloadLatestVersion(String project){
         AutoUpdater.LOGGER.info("Getting data for Modrinth project "+project+"...");
 
