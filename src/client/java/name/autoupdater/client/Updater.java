@@ -54,18 +54,19 @@ public class Updater{
     }
 
     static int mainFunction() throws IOException,InterruptedException{
-        currentMod++;
+        String currentProjectPath = MOD_ROOT + "\\" + currentProject + ".jar";
+        String projectHash = getFileHash(currentProjectPath);
+        HttpResponse<String> latestVersionResponse = getLatestVersionFromHash(projectHash);
 
-        HttpResponse<String> applicableVersions = getFilteredProjectVersions(currentProject);
-        if(applicableVersions.statusCode() == 200){
-            JsonObject latestVersionObj = JsonParser.parseString(applicableVersions.body()).getAsJsonArray().get(0).getAsJsonObject();
+        if(latestVersionResponse.statusCode() == 200){
+            JsonObject latestVersionObj = JsonParser.parseString(latestVersionResponse.body()).getAsJsonObject();
             JsonObject versionFileData = latestVersionObj.get("files").getAsJsonArray().get(0).getAsJsonObject();
             String versionFileUrl = versionFileData.get("url").getAsString();
             String versionFileHash = versionFileData.get("hashes").getAsJsonObject().get("sha512").getAsString();
 
             String filePathName = MOD_ROOT + "\\updated\\" + currentProject + ".jar";
 
-            AutoUpdater.LOGGER.info("Downloading version " + versionFileData.get("id").getAsString() + " of project " + currentProject + "...");
+            AutoUpdater.LOGGER.info("Downloading version {} of project {}...",versionFileData.get("id").getAsString(),currentProject);
 
             downloadFile(versionFileUrl, filePathName);
             while (!getFileHash(filePathName).equals(versionFileHash)) {
@@ -77,6 +78,8 @@ public class Updater{
             return 3;
         }
 
+        currentMod++;
+
         try {
             currentProject = allFileNames.get(currentMod + 1);
         } catch (IndexOutOfBoundsException e) {
@@ -85,14 +88,23 @@ public class Updater{
         return 0;
     }
 
-    static HttpResponse<String> getFilteredProjectVersions(String project) throws IOException,InterruptedException{
-        String address = "https://api.modrinth.com/v2/project/" + project + "/version?";
-        String httpArgs = "loaders=["+LOADER+"]&game_versions=["+GAME_VERSION+"]&include_changelog=false";
+    static HttpResponse<String> getLatestVersionFromHash(String hash) throws IOException,InterruptedException{
+        String address = "https://api.modrinth.com/v2/version_file/" + hash + "/update?";
+        String httpArgs = "algorithm=sha512";
         String fullAddress = address + httpArgs;
 
-        HttpRequest request = HttpRequest.newBuilder().uri(URI.create(fullAddress)).GET().header("User-Agent",USER_AGENT).build();
+        String JSON = """
+                {
+                    "loaders":["%s"],
+                    "game_versions":["%s"]
+                }
+                """.formatted(LOADER,GAME_VERSION);
 
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        HttpRequest request = HttpRequest.newBuilder().uri(URI.create(fullAddress)).POST(
+                HttpRequest.BodyPublishers.ofString(JSON)
+        ).header("User-Agent",USER_AGENT).header("Content-Type", "application/json").build();
+
+        return httpClient.send(request,HttpResponse.BodyHandlers.ofString());
     }
 
     static String getFileHash(String fileName){
