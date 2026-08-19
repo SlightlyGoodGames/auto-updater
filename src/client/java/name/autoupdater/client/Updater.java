@@ -49,33 +49,33 @@ public class Updater{
         return currentProject;
     }
 
-    static void updateCurrentProject(String newName){
-        allFileNames.set(currentMod,newName);
-    }
-
     static int mainFunction() throws IOException,InterruptedException{
         String currentProjectPath = MOD_ROOT + "\\" + currentProject + ".jar";
         String projectHash = getFileHash(currentProjectPath);
         HttpResponse<String> latestVersionResponse = getLatestVersionFromHash(projectHash);
 
-        if(latestVersionResponse.statusCode() == 200){
+        String filePathName = MOD_ROOT + "\\updated\\" + currentProject + ".jar";
+
+        if(latestVersionResponse.statusCode() == 200) {
             JsonObject latestVersionObj = JsonParser.parseString(latestVersionResponse.body()).getAsJsonObject();
             JsonObject versionFileData = latestVersionObj.get("files").getAsJsonArray().get(0).getAsJsonObject();
             String versionFileUrl = versionFileData.get("url").getAsString();
             String versionFileHash = versionFileData.get("hashes").getAsJsonObject().get("sha512").getAsString();
 
-            String filePathName = MOD_ROOT + "\\updated\\" + currentProject + ".jar";
+            if (!versionFileHash.equals(projectHash)) {
+                AutoUpdater.LOGGER.info("Downloading version {} of project {}...", versionFileData.get("id").getAsString(), currentProject);
 
-            AutoUpdater.LOGGER.info("Downloading version {} of project {}...",versionFileData.get("id").getAsString(),currentProject);
-
-            downloadFile(versionFileUrl, filePathName);
-            while (!getFileHash(filePathName).equals(versionFileHash)) {
-                downloadFile(versionFileData.get("url").getAsString(), filePathName);
-                AutoUpdater.LOGGER.warn("Hash comparison failed for project {}!",currentProject);
-                AutoUpdater.LOGGER.warn("If this happens repeatedly, consider checking the mod page on Modrinth or reporting an issue on GitHub with the details of the mod being downloaded.");
+                downloadFile(versionFileUrl, filePathName);
+                while (!getFileHash(filePathName).equals(versionFileHash)) {
+                    downloadFile(versionFileData.get("url").getAsString(), filePathName);
+                    AutoUpdater.LOGGER.warn("Hash comparison failed for project {}!", currentProject);
+                    AutoUpdater.LOGGER.warn("If this happens repeatedly, consider checking the mod page on Modrinth or reporting an issue on GitHub with the details of the mod being downloaded.");
+                }
+            } else {
+                copyFile(currentProjectPath, filePathName);
             }
         } else {
-            return 3;
+            copyFile(currentProjectPath,filePathName);
         }
 
         currentMod++;
@@ -155,11 +155,11 @@ public class Updater{
         }
         return null;
     }
-    static void moveFile(String source, String destination){
+    static void copyFile(String source, String destination){
         Path sourcePath = Path.of(source);
         Path destinationPath = Path.of(destination);
         try {
-            Files.move(sourcePath, destinationPath, StandardCopyOption.REPLACE_EXISTING);
+            Files.copy(sourcePath, destinationPath, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
             e.printStackTrace();
         }
